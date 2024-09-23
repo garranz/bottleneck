@@ -1,0 +1,3 @@
+[submodule "DIB"]
+	path = DIB
+	url = git@github.com:garranz/DIB.git
