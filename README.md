@@ -24,7 +24,7 @@ pip install tensorflow=2.13.0
 3. Install the missing modules to run the notebooks in (DIB)[./DIB/]
 ```bash
 conda activate DIB
-conda install matplotlib scipy
+conda install matplotlib scipy jupyterlab ipython
 ```
 
 
@@ -84,5 +84,5 @@ conda install -c conda-forge cudatoolkit=11.2 cudnn=8
 4. Install the missing modules to run the notebooks in [DIB](./DIB/)
 ```bash
 conda activate DIB
-conda install matplotlib scipy
+conda install matplotlib scipy jupyterlab ipython
 ```
