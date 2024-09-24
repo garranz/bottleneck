@@ -17,7 +17,7 @@ conda create -n DIB python=3.9
 2. Next, we have to install TensorFlow capabilities:
 ```bash
 conda activate DIB
-pip install tensorflow=2.13.0
+pip install "tensorflow==2.13.0"
 ```
 > NOTE: since TensorFlow cannot use GPUs with M1, we only need the cpu version.
 
