@@ -2,7 +2,7 @@
 
 ## Installation
 
-The [DIB](./DIB) repository uses an old version of TensorFlow to work.
+The [DIB](./DIB) repository needs an old version of TensorFlow to work.
 We are gonna use conda environment to deal with this
 
 ### Conda environments
