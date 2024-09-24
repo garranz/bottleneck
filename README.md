@@ -2,7 +2,7 @@
 
 ## Installation
 
-The [DIB](./DIB) repository uses an needs and old version of TensorFlow to work.
+The [DIB](./DIB) repository needs an old version of TensorFlow to work.
 We are gonna use conda environment to deal with this
 
 ### Conda environments
@@ -21,10 +21,10 @@ pip install tensorflow=2.13.0
 ```
 > NOTE: since TensorFlow cannot use GPUs with M1, we only need the cpu version.
 
-3. Install the missing modules to run the notebooks in (DIB)[./DIB/]
+3. Install the missing modules to run the notebooks in [DIB](./DIB/)
 ```bash
 conda activate DIB
-conda install matplotlib scipy
+conda install matplotlib scipy jupyterlab ipython scikit-learn
 ```
 
 
@@ -84,5 +84,5 @@ conda install -c conda-forge cudatoolkit=11.2 cudnn=8
 4. Install the missing modules to run the notebooks in [DIB](./DIB/)
 ```bash
 conda activate DIB
-conda install matplotlib scipy
+conda install matplotlib scipy jupyterlab ipython scikit-learn
 ```
