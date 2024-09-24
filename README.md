@@ -21,7 +21,7 @@ pip install tensorflow=2.13.0
 ```
 > NOTE: since TensorFlow cannot use GPUs with M1, we only need the cpu version.
 
-3. Install the missing modules to run the notebooks in (DIB)[./DIB/]
+3. Install the missing modules to run the notebooks in [DIB](./DIB/)
 ```bash
 conda activate DIB
 conda install matplotlib scipy jupyterlab ipython scikit-learn
