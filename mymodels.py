@@ -1,24 +1,6 @@
 import torch as tc
 import torch.nn as nn
-
-def mlp( din: int, dout: int, arch: tuple, fn_act ):
-
-    # Input Layer
-    layers = []
-
-    ## Positional Encoding
-    #if use_positional_encoding:
-    #    layers.append(PositionalEncoding(positional_encoding_frequencies))
-
-    # Hidden Layers
-    N0 = din
-    for N1 in arch:
-        layers += [ nn.Linear( N0, N1 ), fn_act() ]
-        N0 = N1
-
-    layers += [ nn.Linear( N0, dout ) ]
-
-    return nn.Sequential(*layers) 
+from .myutils import mlp
 
 
 class DIBnet( nn.Module ):
@@ -78,7 +60,8 @@ class DIBnet( nn.Module ):
         # Create integration network
         ########################################################################
         self.OutNet = mlp( self.in_emb_d*self.Nin, out_dim, Oarch, fn_act )
-        self.OutNet.append( out_fn_act() )
+        TODO: chaaaange
+        #self.OutNet.append( out_fn_act() )
 
 
     def forward(self, inputs: tuple ):
