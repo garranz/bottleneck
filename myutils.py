@@ -47,9 +47,11 @@ def MIsandwich( mus: tc.Tensor, logvars: tc.Tensor ):
     ############################################################################
     # Zero out diagonal elements of p_ui_cond_xj
     I = tc.eye(mus_d.size(0), dtype=tc.double, device=mus.device)
-    p_ui_xj *= (1. - I)
+    p_ui_xj_noD = p_ui_xj * (1. - I) 
+    # we have to create a new matrix, if we use *=, p_ui_xi is also
+    # updated (making it 0)
 
     # Compute the Leave-One-Out upper bound
-    l1o_upper = tc.mean(tc.log(p_ui_xi / tc.mean(p_ui_xj, dim=1)))
+    l1o_upper = tc.mean(tc.log(p_ui_xi / tc.mean(p_ui_xj_noD, dim=1)))
 
     return infonce_lower, l1o_upper
