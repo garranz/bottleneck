@@ -1,6 +1,7 @@
 import torch as tc
 import torch.nn as nn
 from typing import Type
+import numpy as np
 
 def mlp( din: int, dout: int, arch: tuple, 
         fn_act: Type[nn.Module] )->nn.Sequential:
@@ -145,4 +146,91 @@ class ConcatCritic(nn.Module):
         # Compute scores for each x_i, y_j pair.
         scores = self._f(xy_pairs)
         return tc.reshape(scores, [batch_size, batch_size]).t()
+
+
+class MINE(nn.Module):
+    def __init__(self, x_dim, y_dim, arch):
+        super(MINE, self).__init__()
+        self.T_func = mlp( x_dim + y_dim, 1, arch, nn.ReLU )
+
+    def forward(self, x_samples, y_samples):  # samples have shape [sample_size, dim]
+        # shuffle and concatenate
+        sample_size = y_samples.shape[0]
+        random_index = tc.randint(sample_size, (sample_size,)).long()
+
+        y_shuffle = y_samples[random_index]
+
+        T0 = self.T_func(tc.cat([x_samples,y_samples], dim = -1))
+        T1 = self.T_func(tc.cat([x_samples,y_shuffle], dim = -1))
+
+        lower_bound = T0.mean() - tc.log(T1.exp().mean())
+
+        # compute the negative loss (maximise loss == minimise -loss)
+        return lower_bound
+
+    def learning_loss(self, x_samples, y_samples):
+        return -self.forward(x_samples, y_samples)
+
+
+class InfoNCE(nn.Module):
+    def __init__(self, x_dim, y_dim, arch):
+        super(InfoNCE, self).__init__()
+
+        self.F_func = mlp( x_dim + y_dim, 1, arch, nn.ReLU )
+        self.F_func.append( nn.Softplus() )
+
+    def forward(self, x_samples, y_samples):  # samples have shape [sample_size, dim]
+        # shuffle and concatenate
+        sample_size = y_samples.shape[0]
+
+        x_tile = x_samples.unsqueeze(0).repeat((sample_size, 1, 1))
+        y_tile = y_samples.unsqueeze(1).repeat((1, sample_size, 1))
+
+        T0 = self.F_func(tc.cat([x_samples,y_samples], dim = -1))
+        T1 = self.F_func(tc.cat([x_tile, y_tile], dim = -1))  #[sample_size, sample_size, 1]
+
+        lower_bound = T0.mean() - (T1.logsumexp(dim = 1).mean() - np.log(sample_size)) 
+        return lower_bound
+
+    def learning_loss(self, x_samples, y_samples):
+        return -self.forward(x_samples, y_samples)
+
+
+
+def logmeanexp_nodiag(x, device='cuda'):
+    batch_size = x.size(0)
+    dim = (0, 1)
+
+    logsumexp = tc.logsumexp(
+        x - tc.diag(tc.inf * tc.ones(batch_size).to(device)), dim=dim)
+
+    num_elem = batch_size * (batch_size - 1.)
+
+    return logsumexp - tc.log(tc.tensor(num_elem)).to(device)
+
+
+def mine_lower_bound(f, momentum=0.9,device="cuda"):
+    """
+    MINE lower bound based on DV inequality. 
+    """
+    first_term = f.diag().mean()
+    buffer_update = logmeanexp_nodiag(f, device).exp()
+
+    with tc.no_grad():
+        second_term = logmeanexp_nodiag(f, device)
+        buffer_new = momentum + buffer_update * (1 - momentum)
+        buffer_new = tc.clamp(buffer_new, min=1e-4)
+        third_term_no_grad = buffer_update / buffer_new
+
+    third_term_grad = buffer_update / buffer_new
+
+    return first_term - second_term - third_term_grad + third_term_no_grad, buffer_update
+
+def infonce_lower_bound(scores, device="cuda"):
+    nll = scores.diag().mean() - scores.logsumexp(dim=1)
+    # Alternative implementation:
+    # nll = -tf.nn.sparse_softmax_cross_entropy_with_logits(logits=scores, labels=tf.range(batch_size))
+    mi = tc.tensor(scores.size(0)).float().log() + nll
+    mi = mi.mean()
+    return mi
 

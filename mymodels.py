@@ -1,13 +1,12 @@
 import torch as tc
 import torch.nn as nn
-from .myutils import mlp
+from myutils import MINE, InfoNCE, mlp #, ConcatCritic, infonce_lower_bound
 
 
 class DIBnet( nn.Module ):
 
-    def __init__( self, in_dims: tuple, out_dim: int, Earch: tuple= (8,8), 
-                 in_emb_d: int= 32, Oarch: tuple= (8,4), 
-                 out_fn_act = nn.ReLU ):
+    def __init__( self, in_dims: tuple, out_dim: int, MIlb: str= 'INCE',
+                 Earch: tuple= (8,8), in_emb_d: int= 32, Oarch: tuple= (8,4) ):
         '''
         Parameters
             in_dims     list | tuple (ints)
@@ -16,6 +15,10 @@ class DIBnet( nn.Module ):
 
             out_dim:    int
                 number of output dimensions
+
+            MIlb:      str (*'INCE')
+                Name of the lower bound estimator for the I(U;Y) maximization 
+                step. Options are -> INCE or MINE
 
             Earch       list | tuple (ints) (*(8,8))
                 Architecture of the encoder. Assume all encoders are the same
@@ -32,9 +35,6 @@ class DIBnet( nn.Module ):
                 information with the output. List with the number of neurons 
                 for each layer. e.g.: an encoder with 12 neurons in the first
                 layer and 24 in the second layer -> (12,24)
-
-            out_fn_act  nn.modules.activation   (*nn.ReLU)
-                Activation function for the final output layer
         '''
         super(DIBnet, self).__init__()  # Calling the parent class constructor
 
@@ -57,23 +57,33 @@ class DIBnet( nn.Module ):
         self.Elist = Elist # list of encoders (one for each input)
 
         ########################################################################
-        # Create integration network
+        # Create integration network to predict I(U;Y)
         ########################################################################
-        self.OutNet = mlp( self.in_emb_d*self.Nin, out_dim, Oarch, fn_act )
-        TODO: chaaaange
-        #self.OutNet.append( out_fn_act() )
+        #self.OutNet = ConcatCritic( self.in_emb_d*self.nin, out_dim, Oarch, 
+        #                           fn_act )
+        if MIlb.upper() == 'INCE':
+            mimodel = InfoNCE
+        elif MIlb.upper() == 'MINE':
+            mimodel = MINE
+        else:
+            raise ValueError( f'MIlb ({MIlb}) must be "INCE" or "MINE"')
+
+        self.OutNet = mimodel(self.in_emb_d*self.nin, out_dim, Oarch)
 
 
-    def forward(self, inputs: tuple ):
+    def forward(self, inputs: tuple, output: tc.Tensor ):
         '''
         Parameters
             inputs      tuple
                 Dimension: self.Nin. The i-item in the list is a tc.Tensor 
                 of size (Nsmaples, self.in_dims[i])
 
+            output     tc.Tensor (Nsamples, self.out_dim)
+                Samples of the output tensor
+
         Returns
-            tc.tensor   ( Nsamples, out_dim )
-                Prediction from the outer net using the input embeddings
+            tc.tensor   ( 1, )
+                Prediction of the mutual information I(U;Y)
 
             tuple       ( Nin, )
                 average KL for each input
@@ -99,7 +109,11 @@ class DIBnet( nn.Module ):
                 tc.exp(emb_logvar) - emb_logvar - 1.) )
             kl_all.append( kl )
 
-        # The input for OutNet must be ( Nsamples, in_emb_d*Nin )
-        return self.OutNet( tc.cat( emb_ch_all, -1 ) ), kl_all
+        #fxy = self.OutNet( tc.cat( emb_ch_all, -1 ), output )
+        #return infonce_lower_bound( fxy ), kl_all
+
+        # The first input for OutNet must be ( Nsamples, in_emb_d*Nin )
+        Lmi = self.OutNet( tc.cat( emb_ch_all, -1 ), output )
+        return Lmi, kl_all
 
 
