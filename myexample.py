@@ -1,83 +1,104 @@
-import numpy as np
-import torch 
-import torch.nn as nn
-
 from mymodels import DIBnet
-from myutils import ConcatCritic, infonce_lower_bound, mine_lower_bound, MINE, InfoNCE
-
+import torch as tc
 import matplotlib.pyplot as plt
 
-def sample_correlated_gaussian(rho=0.5, dim=20, batch_size=128, cubic=None):
-    """Generate samples from a correlated Gaussian distribution."""
-    x, eps = torch.chunk(torch.randn(batch_size, 2 * dim), 2, dim=1)
-    y = rho * x + torch.sqrt(torch.tensor(1. - rho**2).float()) * eps
+from torch.utils.data import Dataset, DataLoader, random_split
 
-    if cubic is not None:
-        y = y ** 3
+# Example custom dataset
+class MyDataset(Dataset):
+    def __init__(self, input1, input2, output):
+        self.input1 = input1
+        self.input2 = input2
+        self.output = output
 
-    return x, y
+    def __len__(self):
+        return len(self.output)
 
-
-def rho_to_mi(dim, rho):
-    """Obtain the ground truth mutual information from rho."""
-    return -0.5 * np.log(1 - rho**2) * dim
-
-
-def mi_to_rho(dim, mi):
-    """Obtain the rho for Gaussian give ground truth mutual information."""
-    return np.sqrt(1 - np.exp(-2.0 / dim * mi))
+    def __getitem__(self, idx):
+        return self.input1[idx], self.input2[idx], self.output[idx]
 
 
 if __name__ == "__main__":
 
-    #crit = ConcatCritic(2,2,(32,16),nn.ReLU)
-    #optimizer = torch.optim.Adam(crit.parameters(), 5e-4) # pyright:ignore
+    N = 100_000
 
-    #model = InfoNCE(2,2,(32,16))
-    model = MINE(2,2,(32,16))
-    optimizer = torch.optim.Adam(model.parameters(), 5e-4) # pyright:ignore
+    m1, m2 = 0, 2
+    s1, s2 = 5, 8
 
-    mi_est_values = []
+    x1 = tc.randn( N,1 )*s1 + m1 
+    x2 = tc.randn( N,1 )*s2 + m2
 
-    #for i in range(1000):
+    y  = x1**2 + x1*x2
 
-    #    x, y = sample_correlated_gaussian(.5, dim=2, batch_size=512)
+    model = DIBnet( (1,1), 1, in_emb_d=1, Earch=(64,64), Oarch=(64,32) )
 
+    optimizer = tc.optim.Adam( model.parameters(), lr=1e-3 ) # pyright:ignore
 
-    #    crit.eval()
-    #    mi_est_values.append(infonce_lower_bound( crit(x, y) ).item())
+    device = 'mps'
+    model.to(device)
 
-    #    crit.train() 
-
-    #    model_loss = -infonce_lower_bound( crit( x, y ) )
-
-    #    optimizer.zero_grad()
-    #    model_loss.backward()
-    #    optimizer.step()
-
-    #    print( i )
+    x1 = (x1 - x1.mean())/x1.std()
+    x2 = (x2 - x2.mean())/x2.std()
+    y = (y - y.mean())/y.std()
+    '''
+    x1c = x1.to(device)
+    x2c = x2.to(device)
+    yc = y.to(device)
 
 
-    models = ( MINE(2,2,(32,16)), InfoNCE(2,2,(32,16)) )
-    for model in models:
-        mi_est_values = []
-        optimizer = torch.optim.Adam(model.parameters(), 5e-4) # pyright:ignore
-        for i in range(500):
+    # Creating the dataset
+    dataset = MyDataset(x1c, x2c, yc)
 
-            x, y = sample_correlated_gaussian(.5, dim=2, batch_size=1024)
+    # Splitting the dataset (70-30 split for training and validation)
+    train_size = int(0.7 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    # Creating DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=1024, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=1024, shuffle=False)
 
 
-            model.eval()
-            mi_est_values.append( -model.learning_loss(x,y).item())
+    for bet in (.001,):# .01, .1, 1.):
 
-            model.train() 
+        # Training loop
+        num_epochs = 10
+        for epoch in range(num_epochs):
 
-            model_loss = model.learning_loss( x, y )
+            model.train()  # Set model to training mode
+            running_loss = 0.0
 
-            optimizer.zero_grad()
-            model_loss.backward()
-            optimizer.step()
+            # Example loop over the DataLoader
+            for ib, (x1b, x2b, yb) in enumerate(train_loader):
+    
+                # Zero the gradients
+                optimizer.zero_grad()
 
-            print( i )
+                # Forward pass
+                Lmi, KLs, klarray = model( (x1b, x2b), yb )
 
-        plt.plot( mi_est_values )
+                # Compute loss
+                loss = -Lmi #+ bet*KLs
+
+                # Backward pass and optimization
+                loss.backward()
+                optimizer.step()
+                print( f'Lmi: {Lmi}', f'KLsum = {KLs}, KLs:{klarray}' )
+                # Accumulate loss for reporting
+                running_loss += loss.item()
+
+            # Print average loss for the epoch
+            avg_loss = running_loss / len(train_loader)
+            print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {avg_loss}")
+
+            # Validation step (optional)
+            model.eval()  # Set model to evaluation mode
+            val_loss = 0.0
+            with tc.no_grad():
+                for x1b, x2b, yb in val_loader:
+                    Lmi, KLs, _ = model( (x1b, x2b), yb )
+                    val_loss += -Lmi #+ bet*KLs
+
+            avg_val_loss = val_loss / len(val_loader)
+            print(f"Validation Loss: {avg_val_loss}")
+    '''

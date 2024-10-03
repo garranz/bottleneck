@@ -42,24 +42,24 @@ class DIBnet( nn.Module ):
         self.Nin = len( in_dims )    # number of inputs
         self.in_emb_d = in_emb_d     # number of embedded dimension of input
 
+        self.kls = tc.zeros( self.Nin )
+
         ########################################################################
         # Create encoders for each input
         ########################################################################
         fn_act = nn.ReLU    # Activation function
 
-        Elist = []
+        self.Elist = nn.ModuleList()
         for in_d in self.in_dims:
 
             # NOTE: The last layer returns the means and stds of p(u|x), so the 
             # number of outputs is 2*in_emb_d
-            Elist.append( mlp( in_d, 2*self.in_emb_d, Earch, fn_act ) )
-
-        self.Elist = Elist # list of encoders (one for each input)
+            self.Elist.append( mlp( in_d, 2*self.in_emb_d, Earch, fn_act ) )
 
         ########################################################################
         # Create integration network to predict I(U;Y)
         ########################################################################
-        #self.OutNet = ConcatCritic( self.in_emb_d*self.nin, out_dim, Oarch, 
+        #self.OutNet = ConcatCritic( self.in_emb_d*self.Nin, out_dim, Oarch, 
         #                           fn_act )
         if MIlb.upper() == 'INCE':
             mimodel = InfoNCE
@@ -68,7 +68,7 @@ class DIBnet( nn.Module ):
         else:
             raise ValueError( f'MIlb ({MIlb}) must be "INCE" or "MINE"')
 
-        self.OutNet = mimodel(self.in_emb_d*self.nin, out_dim, Oarch)
+        self.OutNet = mimodel(self.in_emb_d*self.Nin, out_dim, Oarch)
 
 
     def forward(self, inputs: tuple, output: tc.Tensor ):
@@ -91,6 +91,8 @@ class DIBnet( nn.Module ):
         emb_ch_all = []
         kl_all = []
 
+        klsum = 0. # init sum
+
         # For each input, apply the enconder
         for k,inp in enumerate(inputs):
             # Split the output of the encoder into the mean and logvar of each
@@ -109,11 +111,13 @@ class DIBnet( nn.Module ):
                 tc.exp(emb_logvar) - emb_logvar - 1.) )
             kl_all.append( kl )
 
+            klsum += kl 
+
         #fxy = self.OutNet( tc.cat( emb_ch_all, -1 ), output )
         #return infonce_lower_bound( fxy ), kl_all
 
         # The first input for OutNet must be ( Nsamples, in_emb_d*Nin )
         Lmi = self.OutNet( tc.cat( emb_ch_all, -1 ), output )
-        return Lmi, kl_all
+        return Lmi, klsum, kl_all
 
 
